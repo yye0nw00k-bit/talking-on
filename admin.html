@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>토킹온 관리센터</title>
+  <style>
+    :root{color-scheme:light;--ink:#22243a;--muted:#777d91;--line:#e5e8f0;--bg:#f4f6fb;--purple:#5b5ce2;--red:#c6384c;--green:#23794a}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink)}
+    header{background:#fff;border-bottom:1px solid var(--line);padding:18px clamp(16px,4vw,42px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    h1{font-size:21px;margin:0;letter-spacing:-.5px}header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    a,.btn{font:inherit;border:1px solid var(--line);border-radius:11px;padding:10px 13px;background:#fff;color:var(--ink);text-decoration:none;cursor:pointer;font-weight:750}
+    .primary{background:var(--purple);border-color:var(--purple);color:#fff}.danger{color:var(--red);background:#fff7f8;border-color:#f1c8cf}.good{color:var(--green);background:#f3fbf6;border-color:#c8e8d4}.small{padding:7px 10px;font-size:12px}
+    main{max-width:1300px;margin:auto;padding:24px clamp(14px,3vw,32px) 48px}.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
+    .stat,.panel{background:#fff;border:1px solid var(--line);border-radius:18px}.stat{padding:18px}.stat .label{font-size:13px;color:var(--muted)}.stat strong{display:block;font-size:28px;margin-top:5px}
+    .panel{padding:20px;margin-bottom:20px;min-width:0}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}h2{font-size:17px;margin:0}
+    .muted{color:var(--muted);font-size:12px}.notice{padding:13px 15px;border-radius:12px;background:#f6f7fc;color:var(--muted);font-size:14px}
+    .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:640px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #edf0f5;font-size:13px;vertical-align:middle}th{color:var(--muted);font-weight:750;font-size:12px}tr:last-child td{border-bottom:0}
+    .name{font-weight:800}.badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.pill{display:inline-flex;align-items:center;border-radius:99px;padding:3px 7px;font-size:11px;font-weight:800;background:#f0f1f6;color:#666c80}.pill.admin{background:#ededff;color:#4b4cc2}.pill.banned{background:#fff0f1;color:var(--red)}
+    .reports{display:grid;gap:12px}.report{border:1px solid var(--line);border-radius:14px;padding:15px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:15px;align-items:start}.report-title{font-weight:850;margin-bottom:7px}.report p{margin:6px 0;overflow-wrap:anywhere}.report-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+    .error{color:var(--red);white-space:pre-wrap;margin:10px 0}.loading{color:var(--muted);padding:10px 0}
+    @media(max-width:680px){main{padding-top:16px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.panel{padding:14px}.report{grid-template-columns:1fr}.report-actions{justify-content:flex-start}header{align-items:flex-start}}
+  </style>
+</head>
+<body>
+  <header>
+    <div><h1>토킹온 관리센터</h1><p>회원 관리와 사용자 신고를 확인합니다.</p></div>
+    <a href="/">← 채팅으로 돌아가기</a>
+  </header>
+  <main>
+    <div id="error" class="error" role="alert"></div>
+    <section class="stats" aria-label="서비스 통계">
+      <div class="stat"><div class="label">전체 회원</div><strong id="totalUsers">—</strong></div>
+      <div class="stat"><div class="label">정지된 회원</div><strong id="bannedUsers">—</strong></div>
+      <div class="stat"><div class="label">처리 대기 신고</div><strong id="openReports">—</strong></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>사용자 신고</h2><span class="muted">신고된 사용자와 사유를 검토하세요.</span></div>
+      <div id="reports" class="reports"><div class="loading">신고 목록을 불러오는 중…</div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>회원 관리</h2><button id="refresh" class="btn small" type="button">새로고침</button></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>회원</th><th>가입일</th><th>메시지 수</th><th>상태</th><th>관리</th></tr></thead>
+          <tbody id="users"><tr><td colspan="5" class="loading">회원 목록을 불러오는 중…</td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted">최근 가입한 회원 최대 300명을 표시합니다. 관리자 계정은 여기서 정지할 수 없습니다.</p>
+    </section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    async function request(url, options = {}) {
+      const response = await fetch(url, {
+        credentials: 'same-origin',
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+      });
+      const raw = await response.text();
+      let data = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('서버 응답을 읽을 수 없습니다.'); }
+      if (!response.ok) throw new Error(data.message || '요청에 실패했습니다. (' + response.status + ')');
+      return data;
+    }
+    function node(tag, className, text) {
+      const item = document.createElement(tag);
+      if (className) item.className = className;
+      if (text !== undefined) item.textContent = text;
+      return item;
+    }
+    function formatDate(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('ko-KR');
+    }
+    function pill(text, cls='') { return node('span', 'pill' + (cls ? ' ' + cls : ''), text); }
+    async function setBan(user, banned) {
+      const action = banned ? '정지' : '정지 해제';
+      if (!window.confirm(user.nickname + ' 계정을 ' + action + '할까요?')) return;
+      try {
+        await request('/api/admin/users/' + user.id + '/ban', {
+          method: 'POST', body: JSON.stringify({ banned })
+        });
+        await load();
+      } catch (error) { showError(error.message); }
+    }
+    async function closeReport(reportId) {
+      if (!window.confirm('이 신고를 처리 완료로 표시할까요?')) return;
+      try {
+        await request('/api/admin/reports/' + reportId + '/close', { method: 'POST', body: '{}' });
+        await load();
+      } catch (error) { showError(error.message); }
+    }
+    function showError(message='') { $('error').textContent = message; }
+    function renderUsers(users) {
+      const body = $('users');
+      body.replaceChildren();
+      if (!users.length) {
+        const row = node('tr'); const cell = node('td', 'loading', '등록된 회원이 없습니다.');
+        cell.colSpan = 5; row.append(cell); body.append(row); return;
+      }
+      for (const user of users) {
+        const row = node('tr');
+        const member = node('td');
+        member.append(node('div', 'name', user.nickname));
+        const tags = node('div', 'badges');
+        if (user.isAdmin) tags.append(pill('관리자', 'admin'));
+        if (user.isBanned) tags.append(pill('정지됨', 'banned'));
+        member.append(tags);
+        const date = node('td', '', formatDate(user.createdAt));
+        const messages = node('td', '', String(user.messageCount));
+        const status = node('td', '', user.isBanned ? '이용 정지' : '정상');
+        const actionCell = node('td');
+        if (user.isAdmin) {
+          actionCell.append(pill('보호된 계정', 'admin'));
+        } else {
+          const action = node('button', 'btn small ' + (user.isBanned ? 'good' : 'danger'), user.isBanned ? '정지 해제' : '계정 정지');
+          action.type = 'button';
+          action.addEventListener('click', () => setBan(user, !user.isBanned));
+          actionCell.append(action);
+        }
+        row.append(member, date, messages, status, actionCell);
+        body.append(row);
+      }
+    }
+    function renderReports(reports) {
+      const root = $('reports');
+      root.replaceChildren();
+      if (!reports.length) {
+        root.append(node('div', 'notice', '처리 대기 중인 신고가 없습니다.'));
+        return;
+      }
+      for (const report of reports) {
+        const card = node('article', 'report');
+        const content = node('div');
+        const title = node('div', 'report-title', report.reporterNickname + ' → ' + report.reportedNickname);
+        const reason = node('p');
+        reason.append(node('strong', '', '사유: '), document.createTextNode(report.reason));
+        content.append(title, reason);
+        if (report.details) content.append(node('p', '', report.details));
+        content.append(node('div', 'muted', '접수일: ' + formatDate(report.createdAt)));
+        const actions = node('div', 'report-actions');
+        if (!report.reportedIsAdmin && !report.reportedIsBanned) {
+          const ban = node('button', 'btn small danger', '신고 대상 정지');
+          ban.type = 'button';
+          ban.addEventListener('click', async () => {
+            const target = { id: report.reportedUserId, nickname: report.reportedNickname };
+            await setBan(target, true);
+          });
+          actions.append(ban);
+        }
+        const close = node('button', 'btn small', '처리 완료');
+        close.type = 'button';
+        close.addEventListener('click', () => closeReport(report.id));
+        actions.append(close);
+        card.append(content, actions);
+        root.append(card);
+      }
+    }
+    async function load() {
+      showError('');
+      $('refresh').disabled = true;
+      try {
+        const data = await request('/api/admin/overview');
+        $('totalUsers').textContent = String(data.stats.totalUsers);
+        $('bannedUsers').textContent = String(data.stats.bannedUsers);
+        $('openReports').textContent = String(data.stats.openReports);
+        renderReports(data.reports || []);
+        renderUsers(data.users || []);
+      } catch (error) {
+        showError(error.message);
+        $('reports').replaceChildren(node('div', 'notice', '신고 목록을 불러오지 못했습니다.'));
+        $('users').replaceChildren();
+      } finally { $('refresh').disabled = false; }
+    }
+    $('refresh').addEventListener('click', load);
+    load();
+  </script>
+</body>
+</html>
