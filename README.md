@@ -29,6 +29,14 @@
    - Value: 복사한 Internal Database URL
 5. 저장하면 자동 재배포됩니다.
 
+### 관리자 계정과 관리센터
+Render Web Service의 **Environment**에 아래 값을 추가하세요.
+
+- `TALKON_ADMIN_NICKNAME`: 관리자 닉네임 (기본값 `최연욱`)
+- `TALKON_ADMIN_PASSWORD`: 관리자 비밀번호 (12자 이상)
+
+앱 시작 시 이 계정을 관리자 권한으로 준비합니다. 관리자 계정으로 로그인한 뒤 `/admin`에서 회원 목록, 계정 정지/해제, 사용자 신고 처리를 할 수 있습니다. 일반 회원은 관리자 페이지와 관리 API에 접근할 수 없습니다.
+
 앱이 처음 시작될 때 필요한 테이블을 자동으로 생성합니다.
 
 > Render Free Postgres는 현재 30일 후 만료되는 제한이 있습니다. 장기간 데이터를 보존하려면 만료 전에 유료 Postgres로 업그레이드해야 합니다.
